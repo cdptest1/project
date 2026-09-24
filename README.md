@@ -2,7 +2,7 @@
 
 A WhatsApp-style group chat: everyone who signs up chats in one shared room.
 
-- **Auth**: username + password sign-up and login. Passwords are hashed with bcrypt, and sessions are random tokens stored in the DB and sent as an httpOnly cookie (valid for 7 days).
+- **Auth**: username + password sign-up and login. Passwords are hashed with scrypt (older bcrypt hashes are upgraded on login), failed logins are rate limited, and sessions are random tokens stored in the DB and sent as an httpOnly cookie (valid for 7 days). Logging out disconnects that session's open sockets in every tab.
 - **Database**: SQLite (`chat.db`) via Node's built-in `node:sqlite`, so there is nothing native to compile. It stores users, sessions and all chat messages.
 - **Realtime**: Socket.IO pushes new messages and shows "typing…" indicators.
 - **People online**: a side panel lists everyone currently online and who's typing. It is open by default on desktop, and on phones the "N online" button in the header opens it.
@@ -34,6 +34,12 @@ ANTHROPIC_API_KEY=sk-ant-... npm start
 ```
 
 To let others on your network join, share `http://<your-ip>:3000`. Set `PORT` to change the port and `DB_PATH` to change the database location.
+
+## Test
+
+```
+npm test
+```
 
 ## Files
 

@@ -76,7 +76,10 @@ const stmts = {
       (SELECT COUNT(*) FROM messages m WHERE m.user_id = u.id) AS message_count,
       (SELECT MAX(created_at) FROM messages m WHERE m.user_id = u.id) AS last_message_at
     FROM users u WHERE u.username = ?`),
-  updateProfile: db.prepare('UPDATE users SET status = ?, bio = ?, location = ? WHERE id = ?'),
+  // NULL leaves a field unchanged, so a partial update keeps the other fields
+  updateProfile: db.prepare(`
+    UPDATE users SET status = COALESCE(?, status), bio = COALESCE(?, bio), location = COALESCE(?, location)
+    WHERE id = ?`),
   setAvatarVersion: db.prepare('UPDATE users SET avatar_v = ? WHERE id = ?'),
   upsertAvatar: db.prepare(`
     INSERT INTO avatars (user_id, type, data) VALUES (?, ?, ?)
@@ -88,7 +91,9 @@ const stmts = {
     SELECT u.id, u.username, u.text_color, u.avatar_v FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.token = ? AND s.expires_at > ?`),
   deleteSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
+  expiredSessions: db.prepare('SELECT token FROM sessions WHERE expires_at <= ?'),
   purgeSessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
+  setPasswordHash: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
   setTextColor: db.prepare('UPDATE users SET text_color = ? WHERE id = ?'),
   userTextColor: db.prepare('SELECT text_color FROM users WHERE id = ?'),
   insertMessage: db.prepare('INSERT INTO messages (user_id, kind, body, color, created_at) VALUES (?, ?, ?, ?, ?)'),

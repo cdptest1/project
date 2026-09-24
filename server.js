@@ -1,6 +1,7 @@
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
+const { promisify } = require('util');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { Server } = require('socket.io');
@@ -20,10 +21,24 @@ const TEXT_COLORS = new Set(require('./public/text-colors.json').map((c) => c.id
 const PROFILE_LIMITS = { status: 80, bio: 500, location: 60 };
 const MAX_AVATAR_BYTES = 300 * 1024;
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
+const MAX_PASSWORD_BYTES = 256;
+const AUTH_RATE_LIMIT = Number(process.env.AUTH_RATE_LIMIT) || 10; // attempts per window
+const AUTH_RATE_WINDOW_MS = 15 * 60 * 1000;
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  // Refuse cross-origin handshakes. Same-origin polling requests may omit Origin.
+  allowRequest: (req, cb) => cb(null, !req.headers.origin || originMatchesHost(req)),
+});
+
+function originMatchesHost(req) {
+  try {
+    return new URL(req.headers.origin).host === req.headers.host;
+  } catch {
+    return false;
+  }
+}
 
 // Profile photos arrive as base64 JSON, so that one route gets a larger body limit
 app.use('/api/profile/avatar', express.json({ limit: '600kb' }));
@@ -56,12 +71,62 @@ function userFromCookieHeader(header) {
   return stmts.sessionUser.get(token, Date.now()) || null;
 }
 
+// Each socket joins a room named after its session, so a session's sockets can be closed together
+const sessionRoom = (token) => `sid:${token}`;
+
+function disconnectSession(token) {
+  io.in(sessionRoom(token)).disconnectSockets(true);
+}
+
 function requireAuth(req, res, next) {
   const user = userFromCookieHeader(req.headers.cookie);
   if (!user) return res.status(401).json({ error: 'Not logged in' });
   req.user = user;
   next();
 }
+
+// ---- passwords ----
+
+// scrypt runs in the libuv threadpool, so hashing doesn't block chat traffic
+const scrypt = promisify(crypto.scrypt);
+const SCRYPT_KEYLEN = 64;
+
+async function hashPassword(password) {
+  const salt = crypto.randomBytes(16);
+  const key = await scrypt(password, salt, SCRYPT_KEYLEN);
+  return `scrypt$${salt.toString('base64')}$${key.toString('base64')}`;
+}
+
+// Returns { ok, rehash }. Accounts created before the switch to scrypt still have bcrypt hashes.
+async function verifyPassword(password, stored) {
+  if (stored.startsWith('scrypt$')) {
+    const [, salt, key] = stored.split('$');
+    const expected = Buffer.from(key, 'base64');
+    const actual = await scrypt(password, Buffer.from(salt, 'base64'), expected.length);
+    return { ok: crypto.timingSafeEqual(actual, expected), rehash: false };
+  }
+  const ok = await bcrypt.compare(password, stored);
+  // bcrypt ignores bytes past 72, so only upgrade when the whole password was checked
+  return { ok, rehash: ok && Buffer.byteLength(password) <= 72 };
+}
+
+// ---- rate limiting ----
+
+const rateBuckets = new Map(); // key -> { count, resetAt }
+
+function overLimit(key) {
+  const b = rateBuckets.get(key);
+  return !!b && b.resetAt > Date.now() && b.count >= AUTH_RATE_LIMIT;
+}
+
+function hit(key) {
+  const now = Date.now();
+  const b = rateBuckets.get(key);
+  if (!b || b.resetAt <= now) rateBuckets.set(key, { count: 1, resetAt: now + AUTH_RATE_WINDOW_MS });
+  else b.count++;
+}
+
+const tooMany = (res) => res.status(429).json({ error: 'Too many attempts, try again later' });
 
 // ---- auth routes ----
 
@@ -72,36 +137,58 @@ function validateCredentials(body) {
     return { error: 'Username must be 3-20 letters, numbers or underscores' };
   }
   if (password.length < 6) return { error: 'Password must be at least 6 characters' };
+  if (Buffer.byteLength(password) > MAX_PASSWORD_BYTES) {
+    return { error: `Password must be ${MAX_PASSWORD_BYTES} bytes or fewer` };
+  }
   return { username, password };
 }
 
-app.post('/api/register', (req, res) => {
+app.post('/api/register', async (req, res) => {
+  const ipKey = `register:${req.ip}`;
+  if (overLimit(ipKey)) return tooMany(res);
   const creds = validateCredentials(req.body);
   if (creds.error) return res.status(400).json({ error: creds.error });
 
   if (stmts.userByName.get(creds.username)) {
     return res.status(409).json({ error: 'Username is already taken' });
   }
-  const hash = bcrypt.hashSync(creds.password, 10);
+  hit(ipKey);
+  const hash = await hashPassword(creds.password);
+  // Another request may have taken the name while this one was hashing
+  if (stmts.userByName.get(creds.username)) {
+    return res.status(409).json({ error: 'Username is already taken' });
+  }
   const { lastInsertRowid } = stmts.createUser.run(creds.username, hash, Date.now());
   createSession(res, Number(lastInsertRowid));
   res.json({ id: Number(lastInsertRowid), username: creds.username, text_color: 'default' });
 });
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
-  const user = stmts.userByName.get(username);
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+  const ipKey = `login:${req.ip}`;
+  const userKey = `login-user:${username.toLowerCase()}`;
+  if (overLimit(ipKey) || overLimit(userKey)) return tooMany(res);
+
+  const user = Buffer.byteLength(password) <= MAX_PASSWORD_BYTES && stmts.userByName.get(username);
+  const check = user ? await verifyPassword(password, user.password_hash) : { ok: false };
+  if (!check.ok) {
+    hit(ipKey);
+    hit(userKey);
     return res.status(401).json({ error: 'Invalid username or password' });
   }
+  rateBuckets.delete(userKey);
+  if (check.rehash) stmts.setPasswordHash.run(await hashPassword(password), user.id);
   createSession(res, user.id);
   res.json({ id: user.id, username: user.username, text_color: user.text_color });
 });
 
 app.post('/api/logout', (req, res) => {
   const token = tokenFromCookieHeader(req.headers.cookie);
-  if (token) stmts.deleteSession.run(token);
+  if (token) {
+    stmts.deleteSession.run(token);
+    disconnectSession(token); // other tabs on this session stop receiving chat too
+  }
   res.clearCookie(SESSION_COOKIE);
   res.json({ ok: true });
 });
@@ -133,8 +220,9 @@ function imageType(buf) {
   return null;
 }
 
+// A missing field gives null, which updateProfile treats as "leave unchanged"
 function cleanField(value, max, { multiline = false } = {}) {
-  if (value === undefined) return { value: '' };
+  if (value === undefined) return { value: null };
   if (typeof value !== 'string') return { error: 'Invalid value' };
   let v = value.replace(/\r\n?/g, '\n');
   v = multiline ? v.replace(/\n{3,}/g, '\n\n') : v.replace(/\s+/g, ' ');
@@ -217,14 +305,23 @@ function broadcastPresence() {
 }
 
 io.use((socket, next) => {
-  const user = userFromCookieHeader(socket.handshake.headers.cookie);
+  const token = tokenFromCookieHeader(socket.handshake.headers.cookie);
+  const user = token && stmts.sessionUser.get(token, Date.now());
   if (!user) return next(new Error('unauthorized'));
   socket.data.user = user;
+  socket.data.token = token;
   next();
 });
 
 io.on('connection', (socket) => {
-  const { user } = socket.data;
+  const { user, token } = socket.data;
+  socket.join(sessionRoom(token));
+
+  // Drop the socket if its session has expired or been deleted since the handshake
+  socket.use((packet, next) => {
+    if (stmts.sessionUser.get(token, Date.now())) return next();
+    socket.disconnect(true);
+  });
   onlineCounts.set(user.username, (onlineCounts.get(user.username) || 0) + 1);
   broadcastPresence();
 
@@ -263,7 +360,8 @@ io.on('connection', (socket) => {
     if (!body || body.length > MAX_MESSAGE_LENGTH) {
       return typeof ack === 'function' && ack({ error: 'Invalid message' });
     }
-    const color = TEXT_COLORS.has(payload?.color) ? payload.color : undefined;
+    const color = typeof payload === 'string' ? undefined : payload?.color;
+    if (color !== undefined && !TEXT_COLORS.has(color)) return reply(ack, { error: 'Unknown colour' });
     post('text', body, ack, color);
   });
 
@@ -311,9 +409,28 @@ io.on('connection', (socket) => {
   });
 });
 
-// Clean up expired sessions hourly
-setInterval(() => stmts.purgeSessions.run(Date.now()), 60 * 60 * 1000).unref();
-
-server.listen(PORT, () => {
-  console.log(`Chat server running at http://localhost:${PORT}`);
+// Body-parser and other errors get JSON, not Express's default HTML page with a stack trace
+app.use((err, req, res, next) => {
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) console.error(err);
+  const message = status === 413 ? 'Request is too large'
+    : err.type === 'entity.parse.failed' ? 'Invalid JSON'
+    : err.expose ? err.message : 'Server error';
+  res.status(status).json({ error: message });
 });
+
+// Hourly: close sockets on expired sessions, delete those sessions and drop stale rate-limit buckets
+setInterval(() => {
+  const now = Date.now();
+  for (const { token } of stmts.expiredSessions.all(now)) disconnectSession(token);
+  stmts.purgeSessions.run(now);
+  for (const [key, b] of rateBuckets) if (b.resetAt <= now) rateBuckets.delete(key);
+}, 60 * 60 * 1000).unref();
+
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`Chat server running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = { app, server, io };

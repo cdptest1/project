@@ -80,6 +80,11 @@
 
   $('#logout').addEventListener('click', async () => {
     await api('/api/logout', { method: 'POST' }).catch(() => {});
+    signedOut();
+  });
+
+  // Also runs when the server ends this session (logout in another tab, or expiry)
+  function signedOut() {
     if (socket) socket.disconnect();
     socket = null;
     me = null;
@@ -87,7 +92,7 @@
     summaryCard.classList.add('hidden');
     hideProfile();
     showAuth();
-  });
+  }
 
   function showAuth() {
     chatView.classList.add('hidden');
@@ -154,7 +159,11 @@
   function connectSocket() {
     socket = io();
     socket.on('connect', updateStatus);
-    socket.on('disconnect', () => { statusLine.textContent = 'reconnecting…'; });
+    socket.on('disconnect', (reason) => {
+      // The server only disconnects a socket itself when its session has ended
+      if (reason === 'io server disconnect') signedOut();
+      else statusLine.textContent = 'reconnecting…';
+    });
     socket.on('connect_error', (err) => {
       if (err.message === 'unauthorized') showAuth();
       else statusLine.textContent = 'offline — retrying…';
