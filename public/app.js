@@ -26,6 +26,7 @@
   let lastRendered = null; // last message appended at the bottom
   let rendered = []; // all messages on screen, oldest first
   let online = [];
+  let members = []; // every registered user: { username, status, avatar_v }
   const typingUsers = new Map(); // username -> timeout id
   let stickers = new Map(); // id -> { id, label }
   let textColors = [{ id: 'default', label: 'Default' }];
@@ -84,6 +85,7 @@
     me = null;
     summaryRequest++;
     summaryCard.classList.add('hidden');
+    hideProfile();
     showAuth();
   });
 
@@ -109,9 +111,11 @@
     loadMoreBtn.classList.toggle('hidden', !hasMore);
     scrollToBottom();
 
+    setAvatar($('#my-avatar'), user.username, user.avatar_v);
     connectSocket();
     input.focus();
     showSummary();
+    routeFromHash();
   }
 
   // ---------- Catch-up summary ----------
@@ -163,7 +167,18 @@
       if (nearBottom || msg.user_id === me.id) scrollToBottom();
     });
 
-    socket.on('presence', (names) => { online = names; updateStatus(); });
+    socket.on('presence', (p) => {
+      online = p.online;
+      members = p.members;
+      const mine = members.find((m) => m.username === me.username);
+      if (mine) setAvatar($('#my-avatar'), me.username, mine.avatar_v);
+      updateStatus();
+    });
+
+    // Someone edited their profile: refresh it if it's open
+    socket.on('profile', (username) => {
+      if (profileUser === username && profileForm.classList.contains('hidden')) loadProfile(username);
+    });
 
     socket.on('pins', updatePins);
 
@@ -193,45 +208,75 @@
       : 'connected';
   }
 
-  // ---------- People online ----------
+  // ---------- Members (online and offline) ----------
   // You first, then everyone else alphabetically
   const sortedOnline = () => [
     ...online.filter((n) => n === me?.username),
     ...online.filter((n) => n !== me?.username),
   ];
 
-  function renderPeople() {
-    $('#online-count').textContent = online.length;
-    $('#online-count-panel').textContent = online.length;
-    peopleList.replaceChildren(...sortedOnline().map((name) => {
-      const li = document.createElement('li');
-      li.className = 'person';
-
-      const avatar = document.createElement('div');
-      avatar.className = 'avatar';
-      avatar.style.background = colorFor(name);
-      avatar.textContent = name[0];
-
-      const info = document.createElement('div');
-      const nameEl = document.createElement('div');
-      nameEl.className = 'person-name';
-      nameEl.textContent = name;
-      if (name === me.username) {
-        const you = document.createElement('span');
-        you.className = 'you';
-        you.textContent = ' (you)';
-        nameEl.appendChild(you);
-      }
-      const sub = document.createElement('div');
-      const typing = typingUsers.has(name);
-      sub.className = `person-sub${typing ? ' typing' : ''}`;
-      sub.textContent = typing ? 'typing…' : 'online';
-      info.append(nameEl, sub);
-
-      li.append(avatar, info);
-      return li;
-    }));
+  function sectionHeading(text) {
+    const li = document.createElement('li');
+    li.className = 'people-section';
+    li.textContent = text;
+    return li;
   }
+
+  function renderPeople() {
+    const onlineSet = new Set(online);
+    const byName = new Map(members.map((m) => [m.username, m]));
+    const offline = members.filter((m) => !onlineSet.has(m.username)).map((m) => m.username);
+    $('#online-count').textContent = online.length;
+    $('#member-count').textContent = members.length;
+    peopleList.replaceChildren(
+      sectionHeading(`Online — ${online.length}`),
+      ...sortedOnline().map((name) => personItem(name, true, byName.get(name))),
+      ...(offline.length
+        ? [sectionHeading(`Offline — ${offline.length}`), ...offline.map((name) => personItem(name, false, byName.get(name)))]
+        : []),
+    );
+  }
+
+  function personItem(name, isOnline, member) {
+    const li = document.createElement('li');
+    li.className = `person${isOnline ? '' : ' offline'}`;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'person-btn';
+    btn.dataset.user = name;
+    btn.title = `View ${name}'s profile`;
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    setAvatar(avatar, name, member?.avatar_v);
+
+    const info = document.createElement('div');
+    const nameEl = document.createElement('div');
+    nameEl.className = 'person-name';
+    nameEl.textContent = name;
+    if (name === me.username) {
+      const you = document.createElement('span');
+      you.className = 'you';
+      you.textContent = ' (you)';
+      nameEl.appendChild(you);
+    }
+    const sub = document.createElement('div');
+    const typing = isOnline && typingUsers.has(name);
+    sub.className = `person-sub${typing ? ' typing' : ''}`;
+    const presence = isOnline ? 'online' : 'offline';
+    sub.textContent = typing ? 'typing…' : [presence, member?.status].filter(Boolean).join(' · ');
+    info.className = 'person-info';
+    info.append(nameEl, sub);
+
+    btn.append(avatar, info);
+    li.appendChild(btn);
+    return li;
+  }
+
+  peopleList.addEventListener('click', (e) => {
+    const btn = e.target.closest('.person-btn');
+    if (btn) openProfile(btn.dataset.user);
+  });
 
   function setPeopleOpen(open) {
     chatEl.classList.toggle('people-open', open);
@@ -300,8 +345,11 @@
     el.dataset.id = msg.id;
 
     if (first && !mine) {
-      const author = document.createElement('div');
+      const author = document.createElement('button');
+      author.type = 'button';
       author.className = 'author';
+      author.dataset.user = msg.username;
+      author.title = `View ${msg.username}'s profile`;
       author.textContent = msg.username;
       author.style.color = colorFor(msg.username);
       el.appendChild(author);
@@ -447,6 +495,11 @@
   }
 
   messagesEl.addEventListener('click', (e) => {
+    const author = e.target.closest('.author');
+    if (author) {
+      openProfile(author.dataset.user);
+      return;
+    }
     const action = e.target.closest('.msg-action');
     const msgEl = e.target.closest('.msg');
     if (action) {
@@ -593,7 +646,8 @@
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (popovers.some((p) => !p.panel.classList.contains('hidden'))) setPopover(null);
+    if (!profileView.classList.contains('hidden')) closeProfile();
+    else if (popovers.some((p) => !p.panel.classList.contains('hidden'))) setPopover(null);
     else if (window.matchMedia('(max-width: 900px)').matches) setPeopleOpen(false);
   });
 
@@ -601,6 +655,237 @@
     const inside = popovers.some((p) => p.panel.contains(e.target) || p.toggle.contains(e.target));
     if (!inside) setPopover(null);
   });
+
+  // ---------- Avatars ----------
+  // Shows the user's photo if they have one, else a coloured initial
+  function setAvatar(el, username, version) {
+    el.style.background = colorFor(username);
+    if (version) {
+      const img = document.createElement('img');
+      img.src = `/avatars/${encodeURIComponent(username)}?v=${version}`;
+      img.alt = '';
+      img.onerror = () => el.replaceChildren(username[0]); // fall back to the initial
+      el.replaceChildren(img);
+    } else {
+      el.replaceChildren(username[0]);
+    }
+  }
+
+  // ---------- Profile page ----------
+  const profileView = $('#profile-view');
+  const profileDisplay = $('#profile-display');
+  const profileForm = $('#profile-form');
+  let profileUser = null; // username shown, or null when closed
+  let profile = null; // last loaded profile data
+  let openedInApp = false; // true when we pushed the #profile history entry ourselves
+  let pendingPhoto; // undefined = unchanged, null = remove, string = new data URL
+  let profileLoad = 0;
+
+  const fmtDate = (ts) => new Date(ts).toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' });
+  const fmtDateTime = (ts) => new Date(ts).toLocaleString([], { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  function openProfile(username) {
+    openedInApp = true;
+    location.hash = `#profile/${encodeURIComponent(username)}`;
+  }
+
+  function closeProfile() {
+    if (openedInApp && location.hash.startsWith('#profile/')) history.back();
+    else location.hash = '';
+    openedInApp = false;
+  }
+
+  function routeFromHash() {
+    const m = /^#profile\/([A-Za-z0-9_]{3,20})$/.exec(location.hash);
+    if (m && me) showProfile(decodeURIComponent(m[1]));
+    else hideProfile();
+  }
+  window.addEventListener('hashchange', routeFromHash);
+
+  function showProfile(username) {
+    profileUser = username;
+    profileView.classList.remove('hidden');
+    profileForm.classList.add('hidden');
+    profileDisplay.classList.remove('hidden');
+    setPopover(null);
+    if (window.matchMedia('(max-width: 900px)').matches) setPeopleOpen(false);
+    loadProfile(username);
+    $('#profile-back').focus();
+  }
+
+  function hideProfile() {
+    profileUser = null;
+    profileView.classList.add('hidden');
+  }
+
+  async function loadProfile(username) {
+    const req = ++profileLoad;
+    $('#profile-topbar-title').textContent = 'Profile';
+    $('#profile-name').textContent = username;
+    setAvatar($('#profile-avatar'), username, 0);
+    $('#profile-presence').textContent = '';
+    $('#profile-status').textContent = 'Loading…';
+    let p;
+    try {
+      p = await api(`/api/users/${encodeURIComponent(username)}`);
+    } catch (err) {
+      if (req !== profileLoad) return;
+      $('#profile-status').textContent = err.status === 404 ? 'This user does not exist.' : 'Could not load this profile.';
+      profileDisplay.querySelector('.profile-facts').classList.add('hidden');
+      $('#profile-edit').classList.add('hidden');
+      return;
+    }
+    if (req !== profileLoad) return;
+    profile = p;
+    renderProfile(p);
+  }
+
+  function renderProfile(p) {
+    $('#profile-topbar-title').textContent = p.is_me ? 'My profile' : 'Profile';
+    $('#profile-name').textContent = p.username;
+    setAvatar($('#profile-avatar'), p.username, p.avatar_v);
+    const presence = $('#profile-presence');
+    presence.className = `profile-presence${p.online ? ' is-online' : ''}`;
+    presence.textContent = p.online ? 'Online now' : 'Offline';
+    const status = $('#profile-status');
+    status.textContent = p.status || (p.is_me ? 'No status yet — add one!' : '');
+    status.classList.toggle('placeholder', !p.status);
+
+    $('#profile-bio').textContent = p.bio;
+    $('#fact-bio').classList.toggle('hidden', !p.bio);
+    $('#profile-location').textContent = p.location;
+    $('#fact-location').classList.toggle('hidden', !p.location);
+    $('#profile-joined').textContent = fmtDate(p.created_at);
+    $('#profile-count').textContent = p.message_count.toLocaleString();
+    $('#profile-last').textContent = p.last_message_at ? fmtDateTime(p.last_message_at) : 'No messages yet';
+    profileDisplay.querySelector('.profile-facts').classList.remove('hidden');
+    $('#profile-edit').classList.toggle('hidden', !p.is_me);
+  }
+
+  $('#profile-back').addEventListener('click', closeProfile);
+  profileView.addEventListener('click', (e) => {
+    if (e.target === profileView) closeProfile(); // click on the dimmed backdrop
+  });
+
+  // ----- editing your own profile -----
+  function updateCounters() {
+    profileForm.querySelectorAll('.counter').forEach((c) => {
+      const field = profileForm.elements[c.dataset.for];
+      c.textContent = `${field.value.length}/${field.maxLength}`;
+    });
+  }
+
+  function renderEditPhoto() {
+    const el = $('#edit-avatar');
+    if (typeof pendingPhoto === 'string') {
+      const img = document.createElement('img');
+      img.src = pendingPhoto;
+      img.alt = '';
+      el.style.background = colorFor(profile.username);
+      el.replaceChildren(img);
+    } else {
+      setAvatar(el, profile.username, pendingPhoto === null ? 0 : profile.avatar_v);
+    }
+    const hasPhoto = typeof pendingPhoto === 'string' || (pendingPhoto === undefined && profile.avatar_v);
+    $('#photo-remove').classList.toggle('hidden', !hasPhoto);
+  }
+
+  $('#profile-edit').addEventListener('click', () => {
+    if (!profile?.is_me) return;
+    pendingPhoto = undefined;
+    profileForm.elements.status.value = profile.status;
+    profileForm.elements.bio.value = profile.bio;
+    profileForm.elements.location.value = profile.location;
+    $('#profile-error').textContent = '';
+    updateCounters();
+    renderEditPhoto();
+    $('#profile-topbar-title').textContent = 'Edit profile';
+    profileDisplay.classList.add('hidden');
+    profileForm.classList.remove('hidden');
+    profileForm.elements.status.focus();
+  });
+
+  profileForm.addEventListener('input', updateCounters);
+
+  $('#profile-cancel').addEventListener('click', () => {
+    profileForm.classList.add('hidden');
+    profileDisplay.classList.remove('hidden');
+    renderProfile(profile);
+  });
+
+  $('#photo-change').addEventListener('click', () => $('#photo-input').click());
+  $('#photo-remove').addEventListener('click', () => {
+    pendingPhoto = null;
+    renderEditPhoto();
+  });
+
+  // Crops to a centred square and shrinks to 256px JPEG before upload
+  async function resizePhoto(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error('That file could not be read as an image.'));
+        i.src = url;
+      });
+      const size = 256;
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; // transparent PNGs get a white background
+      ctx.fillRect(0, 0, size, size);
+      ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+      return canvas.toDataURL('image/jpeg', 0.85);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  $('#photo-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = ''; // allow picking the same file again
+    if (!file) return;
+    $('#profile-error').textContent = '';
+    try {
+      pendingPhoto = await resizePhoto(file);
+      renderEditPhoto();
+    } catch (err) {
+      $('#profile-error').textContent = err.message;
+    }
+  });
+
+  profileForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const save = $('#profile-save');
+    save.disabled = true;
+    $('#profile-error').textContent = '';
+    try {
+      if (typeof pendingPhoto === 'string') {
+        await api('/api/profile/avatar', { method: 'PUT', body: JSON.stringify({ data: pendingPhoto }) });
+      } else if (pendingPhoto === null) {
+        await api('/api/profile/avatar', { method: 'DELETE' });
+      }
+      await api('/api/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          status: profileForm.elements.status.value,
+          bio: profileForm.elements.bio.value,
+          location: profileForm.elements.location.value,
+        }),
+      });
+      profileForm.classList.add('hidden');
+      profileDisplay.classList.remove('hidden');
+      await loadProfile(me.username);
+    } catch (err) {
+      $('#profile-error').textContent = err.message;
+    } finally {
+      save.disabled = false;
+    }
+  });
+
+  $('#my-profile').addEventListener('click', () => openProfile(me.username));
 
   // ---------- Boot ----------
   // Stickers and colours must be known before history renders

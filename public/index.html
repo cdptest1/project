@@ -39,8 +39,11 @@
           <div id="status-line" class="status">connecting…</div>
         </div>
         <button id="people-toggle" class="ghost people-toggle" type="button"
-                aria-controls="people" aria-expanded="false" title="People online">
+                aria-controls="people" aria-expanded="false" title="Group members">
           <span class="online-dot"></span><span id="online-count">0</span> online
+        </button>
+        <button id="my-profile" class="my-profile" type="button" title="My profile" aria-label="My profile">
+          <span id="my-avatar" class="avatar small"></span>
         </button>
         <button id="logout" class="ghost" type="button">Log out</button>
       </header>
@@ -93,14 +96,65 @@
       </form>
     </div>
 
-    <aside id="people" class="people" aria-label="People online">
+    <aside id="people" class="people" aria-label="Group members">
       <div class="people-header">
-        <span>Online — <span id="online-count-panel">0</span></span>
+        <span>Members — <span id="member-count">0</span></span>
         <button id="people-close" class="icon-btn people-close" type="button" aria-label="Close">✕</button>
       </div>
       <ul id="people-list" class="people-list"></ul>
     </aside>
   </section>
+
+  <!-- Profile page (opened via #profile/<username>) -->
+  <div id="profile-view" class="profile-view hidden" role="dialog" aria-modal="true" aria-labelledby="profile-name">
+    <div class="profile-page">
+      <header class="profile-topbar">
+        <button id="profile-back" class="icon-btn" type="button" aria-label="Back to chat">←</button>
+        <span id="profile-topbar-title" class="profile-topbar-title">Profile</span>
+      </header>
+
+      <div id="profile-display" class="profile-body">
+        <div id="profile-avatar" class="avatar profile-avatar"></div>
+        <h2 id="profile-name" class="profile-name"></h2>
+        <div id="profile-presence" class="profile-presence"></div>
+        <p id="profile-status" class="profile-status"></p>
+        <button id="profile-edit" class="primary slim hidden" type="button">Edit profile</button>
+        <dl class="profile-facts">
+          <div id="fact-bio" class="fact"><dt>About</dt><dd id="profile-bio"></dd></div>
+          <div id="fact-location" class="fact"><dt>Location</dt><dd id="profile-location"></dd></div>
+          <div class="fact"><dt>Joined</dt><dd id="profile-joined"></dd></div>
+          <div class="fact"><dt>Messages sent</dt><dd id="profile-count"></dd></div>
+          <div class="fact"><dt>Last message</dt><dd id="profile-last"></dd></div>
+        </dl>
+      </div>
+
+      <form id="profile-form" class="profile-body hidden" novalidate>
+        <div id="edit-avatar" class="avatar profile-avatar"></div>
+        <div class="photo-actions">
+          <button type="button" id="photo-change" class="ghost">Change photo</button>
+          <button type="button" id="photo-remove" class="ghost">Remove photo</button>
+          <input type="file" id="photo-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden />
+        </div>
+        <label class="field">Status
+          <input name="status" maxlength="80" placeholder="e.g. Studying for exams 📚" autocomplete="off" />
+          <span class="counter" data-for="status"></span>
+        </label>
+        <label class="field">About me
+          <textarea name="bio" maxlength="500" rows="4" placeholder="Tell people a bit about yourself"></textarea>
+          <span class="counter" data-for="bio"></span>
+        </label>
+        <label class="field">Location
+          <input name="location" maxlength="60" placeholder="e.g. Singapore" autocomplete="off" />
+          <span class="counter" data-for="location"></span>
+        </label>
+        <p id="profile-error" class="error" role="alert"></p>
+        <div class="form-actions">
+          <button type="button" id="profile-cancel" class="ghost">Cancel</button>
+          <button type="submit" id="profile-save" class="primary slim">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <template id="pin-icon"><svg class="pin-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16 9V4h1a1 1 0 0 0 0-2H7a1 1 0 0 0 0 2h1v5a3 3 0 0 1-3 3v2h5.97v7l1 1 1-1v-7H19v-2a3 3 0 0 1-3-3z"/></svg></template>
   <script src="/socket.io/socket.io.js"></script>

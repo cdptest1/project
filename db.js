@@ -12,7 +12,17 @@ db.exec(`
     username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
     password_hash TEXT NOT NULL,
     text_color    TEXT NOT NULL DEFAULT 'default', -- id from public/text-colors.json
+    status        TEXT NOT NULL DEFAULT '', -- short profile tagline
+    bio           TEXT NOT NULL DEFAULT '', -- "About me"
+    location      TEXT NOT NULL DEFAULT '',
+    avatar_v      INTEGER NOT NULL DEFAULT 0, -- photo version (updated_at), 0 = no photo
     created_at    INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS avatars (
+    user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    type       TEXT NOT NULL, -- image/jpeg | image/png | image/webp
+    data       BLOB NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS sessions (
@@ -48,15 +58,34 @@ function addColumn(table, column, definition) {
 addColumn('messages', 'kind', "TEXT NOT NULL DEFAULT 'text'");
 addColumn('messages', 'color', 'TEXT');
 addColumn('users', 'text_color', "TEXT NOT NULL DEFAULT 'default'");
+addColumn('users', 'status', "TEXT NOT NULL DEFAULT ''");
+addColumn('users', 'bio', "TEXT NOT NULL DEFAULT ''");
+addColumn('users', 'location', "TEXT NOT NULL DEFAULT ''");
+addColumn('users', 'avatar_v', 'INTEGER NOT NULL DEFAULT 0');
 
 const MESSAGE_COLS = 'm.id, m.kind, m.body, m.color, m.created_at, u.id AS user_id, u.username';
 
 const stmts = {
   createUser: db.prepare('INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)'),
   userByName: db.prepare('SELECT * FROM users WHERE username = ?'),
+  listMembers: db.prepare('SELECT username, status, avatar_v FROM users ORDER BY username COLLATE NOCASE'),
+
+  // Profiles
+  profileByName: db.prepare(`
+    SELECT u.id, u.username, u.status, u.bio, u.location, u.avatar_v, u.created_at,
+      (SELECT COUNT(*) FROM messages m WHERE m.user_id = u.id) AS message_count,
+      (SELECT MAX(created_at) FROM messages m WHERE m.user_id = u.id) AS last_message_at
+    FROM users u WHERE u.username = ?`),
+  updateProfile: db.prepare('UPDATE users SET status = ?, bio = ?, location = ? WHERE id = ?'),
+  setAvatarVersion: db.prepare('UPDATE users SET avatar_v = ? WHERE id = ?'),
+  upsertAvatar: db.prepare(`
+    INSERT INTO avatars (user_id, type, data) VALUES (?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET type = excluded.type, data = excluded.data`),
+  deleteAvatar: db.prepare('DELETE FROM avatars WHERE user_id = ?'),
+  avatarByName: db.prepare('SELECT a.type, a.data, u.avatar_v FROM avatars a JOIN users u ON u.id = a.user_id WHERE u.username = ?'),
   createSession: db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)'),
   sessionUser: db.prepare(`
-    SELECT u.id, u.username, u.text_color FROM sessions s JOIN users u ON u.id = s.user_id
+    SELECT u.id, u.username, u.text_color, u.avatar_v FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.token = ? AND s.expires_at > ?`),
   deleteSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
   purgeSessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
