@@ -53,6 +53,8 @@
       document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab));
       authSubmit.textContent = mode === 'login' ? 'Log in' : 'Create account';
       authForm.password.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
+      // New passwords need 8+ characters; older accounts may still have shorter ones
+      authForm.password.minLength = mode === 'login' ? 0 : 8;
       authError.textContent = '';
     });
   });
@@ -80,6 +82,10 @@
 
   $('#logout').addEventListener('click', async () => {
     await api('/api/logout', { method: 'POST' }).catch(() => {});
+    leaveChat();
+  });
+
+  function leaveChat() {
     if (socket) socket.disconnect();
     socket = null;
     me = null;
@@ -87,7 +93,7 @@
     summaryCard.classList.add('hidden');
     hideProfile();
     showAuth();
-  });
+  }
 
   function showAuth() {
     chatView.classList.add('hidden');
@@ -154,7 +160,11 @@
   function connectSocket() {
     socket = io();
     socket.on('connect', updateStatus);
-    socket.on('disconnect', () => { statusLine.textContent = 'reconnecting…'; });
+    socket.on('disconnect', (reason) => {
+      // The server only ends a socket itself when its session is gone (logged out elsewhere or expired)
+      if (reason === 'io server disconnect') leaveChat();
+      else statusLine.textContent = 'reconnecting…';
+    });
     socket.on('connect_error', (err) => {
       if (err.message === 'unauthorized') showAuth();
       else statusLine.textContent = 'offline — retrying…';
