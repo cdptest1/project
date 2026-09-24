@@ -31,26 +31,78 @@
 
   <!-- Chat screen -->
   <section id="chat-view" class="chat hidden">
-    <header class="chat-header">
-      <div class="avatar group">👥</div>
-      <div class="header-info">
-        <div class="title">Group Chat</div>
-        <div id="status-line" class="status">connecting…</div>
+    <div class="chat-main">
+      <header class="chat-header">
+        <div class="avatar group">👥</div>
+        <div class="header-info">
+          <div class="title">Group Chat</div>
+          <div id="status-line" class="status">connecting…</div>
+        </div>
+        <button id="people-toggle" class="ghost people-toggle" type="button"
+                aria-controls="people" aria-expanded="false" title="People online">
+          <span class="online-dot"></span><span id="online-count">0</span> online
+        </button>
+        <button id="logout" class="ghost" type="button">Log out</button>
+      </header>
+
+      <div id="pinned-bar" class="pinned-bar hidden">
+        <div id="pin-indicator" class="pin-indicator" aria-hidden="true"></div>
+        <button id="pinned-open" class="pinned-main" type="button" title="Go to pinned message">
+          <span class="pinned-label"><svg class="pin-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16 9V4h1a1 1 0 0 0 0-2H7a1 1 0 0 0 0 2h1v5a3 3 0 0 1-3 3v2h5.97v7l1 1 1-1v-7H19v-2a3 3 0 0 1-3-3z"/></svg><span id="pinned-heading">Pinned message</span></span>
+          <span id="pinned-text" class="pinned-text"></span>
+        </button>
+        <button id="pinned-unpin" class="icon-btn" type="button" title="Unpin this message" aria-label="Unpin this message">✕</button>
       </div>
-      <span id="me" class="me"></span>
-      <button id="logout" class="ghost" type="button">Log out</button>
-    </header>
 
-    <main id="messages" class="messages">
-      <button id="load-more" class="load-more hidden" type="button">Load earlier messages</button>
-    </main>
+      <section id="summary-card" class="summary-card hidden" aria-live="polite">
+        <div class="summary-head">
+          <span class="summary-title">✨ Catch up</span>
+          <span id="summary-meta" class="summary-meta"></span>
+          <button id="summary-close" class="icon-btn" type="button" aria-label="Dismiss summary">✕</button>
+        </div>
+        <p id="summary-text" class="summary-text"></p>
+      </section>
 
-    <form id="composer" class="composer">
-      <textarea id="input" rows="1" maxlength="2000" placeholder="Type a message" autocomplete="off"></textarea>
-      <button type="submit" class="send" aria-label="Send">➤</button>
-    </form>
+      <main id="messages" class="messages">
+        <button id="load-more" class="load-more hidden" type="button">Load earlier messages</button>
+      </main>
+
+      <div id="sticker-tray" class="sticker-tray hidden" role="dialog" aria-label="Stickers">
+        <div class="tray-title">Stickers</div>
+        <div id="sticker-grid" class="sticker-grid"></div>
+      </div>
+
+      <div id="color-menu" class="color-menu hidden" role="dialog" aria-label="Font colour">
+        <div class="tray-title">Font colour</div>
+        <div id="color-grid" class="color-grid" role="radiogroup" aria-label="Font colour"></div>
+      </div>
+
+      <form id="composer" class="composer">
+        <button type="button" id="sticker-toggle" class="icon-btn" aria-label="Stickers"
+                aria-controls="sticker-tray" aria-expanded="false" title="Stickers">
+          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+            <path fill="currentColor" d="M12 2a10 10 0 1 0 0 20h.4a1 1 0 0 0 .7-.3l8.6-8.6a1 1 0 0 0 .3-.7V12A10 10 0 0 0 12 2Zm1 17.9V17a4 4 0 0 1 4-4h2.9A8 8 0 0 1 13 19.9ZM12 4a8 8 0 0 1 7.9 7H17a6 6 0 0 0-6 6v2.9A8 8 0 0 1 12 4Zm-3 5.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/>
+          </svg>
+        </button>
+        <button type="button" id="color-toggle" class="icon-btn color-toggle" aria-label="Font colour"
+                aria-controls="color-menu" aria-expanded="false" title="Font colour">
+          <span class="color-a">A</span><span id="color-bar" class="color-bar"></span>
+        </button>
+        <textarea id="input" rows="1" maxlength="2000" placeholder="Type a message" autocomplete="off"></textarea>
+        <button type="submit" class="send" aria-label="Send">➤</button>
+      </form>
+    </div>
+
+    <aside id="people" class="people" aria-label="People online">
+      <div class="people-header">
+        <span>Online — <span id="online-count-panel">0</span></span>
+        <button id="people-close" class="icon-btn people-close" type="button" aria-label="Close">✕</button>
+      </div>
+      <ul id="people-list" class="people-list"></ul>
+    </aside>
   </section>
 
+  <template id="pin-icon"><svg class="pin-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16 9V4h1a1 1 0 0 0 0-2H7a1 1 0 0 0 0 2h1v5a3 3 0 0 1-3 3v2h5.97v7l1 1 1-1v-7H19v-2a3 3 0 0 1-3-3z"/></svg></template>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/app.js"></script>
 </body>

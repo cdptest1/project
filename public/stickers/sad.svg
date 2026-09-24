@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -18 160 178" width="160" height="178">
+<defs><filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".25"/></filter></defs>
+<g filter="url(#s)">
+
+<circle cx="80" cy="72" r="54" fill="#9fc5ff" stroke="#fff" stroke-width="8"/>
+<ellipse cx="62" cy="40" rx="16" ry="9" fill="#fff" opacity=".35" transform="rotate(-25 62 40)"/>
+<ellipse cx="62" cy="66" rx="6" ry="8" fill="#3a2418"/><ellipse cx="98" cy="66" rx="6" ry="8" fill="#3a2418"/><path d="M50 54 l18 -6" fill="none" stroke="#3a2418" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M110 54 l-18 -6" fill="none" stroke="#3a2418" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M64 100 q16 -14 32 0" fill="none" stroke="#3a2418" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M58 76 q-6 22 2 30 q8 -8 2 -30z M102 76 q6 22 -2 30 q-8 -8 -2 -30z" fill="#5cc8ff"/>
+<text x="80" y="150" text-anchor="middle" font-family="'Arial Rounded MT Bold','Nunito','Segoe UI',Arial,sans-serif" font-size="28" font-weight="900"
+  fill="#3b6fd8" stroke="#fff" stroke-width="7" stroke-linejoin="round" paint-order="stroke">Nooo</text>
+</g>
+</svg>

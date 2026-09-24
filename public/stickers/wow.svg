@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -18 160 178" width="160" height="178">
+<defs><filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".25"/></filter></defs>
+<g filter="url(#s)">
+
+<circle cx="80" cy="72" r="54" fill="#ffd23f" stroke="#fff" stroke-width="8"/>
+<ellipse cx="62" cy="40" rx="16" ry="9" fill="#fff" opacity=".35" transform="rotate(-25 62 40)"/>
+<circle cx="61" cy="62" r="12" fill="#fff" stroke="#3a2418" stroke-width="3"/><circle cx="99" cy="62" r="12" fill="#fff" stroke="#3a2418" stroke-width="3"/>
+         <circle cx="61" cy="63" r="6" fill="#3a2418"/><circle cx="99" cy="63" r="6" fill="#3a2418"/>
+<ellipse cx="80" cy="96" rx="9" ry="12" fill="#3a2418"/>
+
+<text x="80" y="150" text-anchor="middle" font-family="'Arial Rounded MT Bold','Nunito','Segoe UI',Arial,sans-serif" font-size="28" font-weight="900"
+  fill="#7b61ff" stroke="#fff" stroke-width="7" stroke-linejoin="round" paint-order="stroke">Wow!</text>
+</g>
+</svg>

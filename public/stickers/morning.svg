@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -18 160 178" width="160" height="178">
+<defs><filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".25"/></filter></defs>
+<g filter="url(#s)">
+<path d="M140.0 72.0 L154.0 72.0" stroke="#ffb020" stroke-width="8" stroke-linecap="round"/><path d="M132.0 102.0 L144.1 109.0" stroke="#ffb020" stroke-width="8" stroke-linecap="round"/><path d="M110.0 124.0 L117.0 136.1" stroke="#ffb020" stroke-width="8" stroke-linecap="round"/><path d="M80.0 132.0 L80.0 146.0" stroke="#ffb020" stroke-width="8" stroke-linecap="round"/><path d="M50.0 124.0 L43.0 136.1" stroke="#ffb020" stroke-width="8" stroke-linecap="round"/><path d="M28.0 102.0 L15.9 109.0" stroke="#ffb020" stroke-width="8" stroke-linecap="round"/><path d="M20.0 72.0 L6.0 72.0" stroke="#ffb020" stroke-width="8" stroke-linecap="round"/><path d="M28.0 42.0 L15.9 35.0" stroke="#ffb020" stroke-width="8" stroke-linecap="round"/><path d="M50.0 20.0 L43.0 7.9" stroke="#ffb020" stroke-width="8" stroke-linecap="round"/><path d="M80.0 12.0 L80.0 -2.0" stroke="#ffb020" stroke-width="8" stroke-linecap="round"/><path d="M110.0 20.0 L117.0 7.9" stroke="#ffb020" stroke-width="8" stroke-linecap="round"/><path d="M132.0 42.0 L144.1 35.0" stroke="#ffb020" stroke-width="8" stroke-linecap="round"/>
+<circle cx="80" cy="72" r="54" fill="#ffc93c" stroke="#fff" stroke-width="8"/>
+<ellipse cx="62" cy="40" rx="16" ry="9" fill="#fff" opacity=".35" transform="rotate(-25 62 40)"/>
+<path d="M53 68 q9 -12 18 0" fill="none" stroke="#3a2418" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M89 68 q9 -12 18 0" fill="none" stroke="#3a2418" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M62 88 q18 16 36 0" fill="none" stroke="#3a2418" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<ellipse cx="46" cy="82" rx="9" ry="6" fill="#ff7a8a" opacity=".55"/><ellipse cx="114" cy="82" rx="9" ry="6" fill="#ff7a8a" opacity=".55"/>
+<text x="80" y="150" text-anchor="middle" font-family="'Arial Rounded MT Bold','Nunito','Segoe UI',Arial,sans-serif" font-size="28" font-weight="900"
+  fill="#ff8a00" stroke="#fff" stroke-width="7" stroke-linejoin="round" paint-order="stroke">Morning!</text>
+</g>
+</svg>

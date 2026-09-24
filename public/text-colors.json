@@ -1,0 +1,10 @@
+[
+  { "id": "default", "label": "Default" },
+  { "id": "red", "label": "Red" },
+  { "id": "orange", "label": "Orange" },
+  { "id": "green", "label": "Green" },
+  { "id": "teal", "label": "Teal" },
+  { "id": "blue", "label": "Blue" },
+  { "id": "purple", "label": "Purple" },
+  { "id": "pink", "label": "Pink" }
+]

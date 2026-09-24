@@ -1,0 +1,54 @@
+[
+  {
+    "id": "hi",
+    "label": "Hi!"
+  },
+  {
+    "id": "lol",
+    "label": "LOL"
+  },
+  {
+    "id": "love",
+    "label": "Love it"
+  },
+  {
+    "id": "ok",
+    "label": "Got it"
+  },
+  {
+    "id": "thanks",
+    "label": "Thanks!"
+  },
+  {
+    "id": "wow",
+    "label": "Wow!"
+  },
+  {
+    "id": "cool",
+    "label": "Cool"
+  },
+  {
+    "id": "party",
+    "label": "Yay!"
+  },
+  {
+    "id": "sad",
+    "label": "Nooo"
+  },
+  {
+    "id": "angry",
+    "label": "Grr"
+  },
+  {
+    "id": "oops",
+    "label": "Oops"
+  },
+  {
+    "id": "morning",
+    "label": "Good morning"
+  },
+  {
+    "id": "night",
+    "label": "Good night"
+  }
+]

@@ -5,12 +5,18 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { Server } = require('socket.io');
 const { stmts } = require('./db');
+const { summarise, SUMMARY_SIZE } = require('./summary');
 
 const PORT = process.env.PORT || 3000;
 const SESSION_COOKIE = 'sid';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const PAGE_SIZE = 50;
 const MAX_MESSAGE_LENGTH = 2000;
+const MAX_PINS = 3;
+const STICKERS = require('./public/stickers/stickers.json');
+const STICKER_IDS = new Set(STICKERS.map((s) => s.id));
+const STICKER_LABELS = new Map(STICKERS.map((s) => [s.id, s.label]));
+const TEXT_COLORS = new Set(require('./public/text-colors.json').map((c) => c.id));
 
 const app = express();
 const server = http.createServer(app);
@@ -74,7 +80,7 @@ app.post('/api/register', (req, res) => {
   const hash = bcrypt.hashSync(creds.password, 10);
   const { lastInsertRowid } = stmts.createUser.run(creds.username, hash, Date.now());
   createSession(res, Number(lastInsertRowid));
-  res.json({ id: Number(lastInsertRowid), username: creds.username });
+  res.json({ id: Number(lastInsertRowid), username: creds.username, text_color: 'default' });
 });
 
 app.post('/api/login', (req, res) => {
@@ -85,7 +91,7 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
   createSession(res, user.id);
-  res.json({ id: user.id, username: user.username });
+  res.json({ id: user.id, username: user.username, text_color: user.text_color });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -107,9 +113,15 @@ app.get('/api/messages', requireAuth, (req, res) => {
   res.json({ messages: rows, hasMore: rows.length === PAGE_SIZE });
 });
 
+// Catch-up summary of the latest messages, shown when someone logs in
+app.get('/api/summary', requireAuth, async (req, res) => {
+  res.json(await summarise(stmts.recentMessages.all(SUMMARY_SIZE), STICKER_LABELS));
+});
+
 // ---- realtime ----
 
 const onlineCounts = new Map(); // username -> number of open sockets
+let lastPinAt = 0;
 
 function broadcastPresence() {
   io.emit('presence', [...onlineCounts.keys()].sort());
@@ -127,22 +139,75 @@ io.on('connection', (socket) => {
   onlineCounts.set(user.username, (onlineCounts.get(user.username) || 0) + 1);
   broadcastPresence();
 
-  socket.on('message', (text, ack) => {
+  const reply = (ack, payload) => typeof ack === 'function' && ack(payload);
+
+  // Send current pins to this client (also re-sent on every reconnect)
+  socket.emit('pins', stmts.listPins.all());
+
+  function post(kind, body, ack, requestedColor) {
+    const createdAt = Date.now();
+    let color = null;
+    if (kind === 'text') {
+      // The client sends the colour it is showing, so what you see is what gets sent.
+      // Fall back to the saved preference for clients that don't send one.
+      const textColor = requestedColor ?? stmts.userTextColor.get(user.id)?.text_color;
+      if (requestedColor) stmts.setTextColor.run(requestedColor, user.id); // keep saved preference in sync
+      color = textColor && textColor !== 'default' ? textColor : null;
+    }
+    const { lastInsertRowid } = stmts.insertMessage.run(user.id, kind, body, color, createdAt);
+    io.emit('message', {
+      id: Number(lastInsertRowid),
+      kind,
+      body,
+      color,
+      created_at: createdAt,
+      user_id: user.id,
+      username: user.username,
+    });
+    if (typeof ack === 'function') ack({ ok: true });
+  }
+
+  // Payload is { text, color } (or a plain string from older clients)
+  socket.on('message', (payload, ack) => {
+    const text = typeof payload === 'string' ? payload : payload?.text;
     const body = typeof text === 'string' ? text.trim() : '';
     if (!body || body.length > MAX_MESSAGE_LENGTH) {
       return typeof ack === 'function' && ack({ error: 'Invalid message' });
     }
-    const createdAt = Date.now();
-    const { lastInsertRowid } = stmts.insertMessage.run(user.id, body, createdAt);
-    const msg = {
-      id: Number(lastInsertRowid),
-      body,
-      created_at: createdAt,
-      user_id: user.id,
-      username: user.username,
-    };
-    io.emit('message', msg);
-    if (typeof ack === 'function') ack({ ok: true });
+    const color = TEXT_COLORS.has(payload?.color) ? payload.color : undefined;
+    post('text', body, ack, color);
+  });
+
+  socket.on('sticker', (id, ack) => {
+    if (!STICKER_IDS.has(id)) {
+      return typeof ack === 'function' && ack({ error: 'Unknown sticker' });
+    }
+    post('sticker', id, ack);
+  });
+
+  socket.on('set-color', (color, ack) => {
+    if (!TEXT_COLORS.has(color)) return reply(ack, { error: 'Unknown colour' });
+    stmts.setTextColor.run(color, user.id);
+    reply(ack, { ok: true });
+  });
+
+  socket.on('pin', (id, ack) => {
+    if (!Number.isInteger(id) || !stmts.messageExists.get(id)) {
+      return reply(ack, { error: 'Message not found' });
+    }
+    // Strictly increasing so pin order is exact even for pins in the same millisecond
+    lastPinAt = Math.max(Date.now(), lastPinAt + 1);
+    stmts.insertPin.run(id, user.id, lastPinAt);
+    stmts.trimPins.run(MAX_PINS); // pinning past the limit drops the oldest pin
+    io.emit('pins', stmts.listPins.all());
+    reply(ack, { ok: true });
+  });
+
+  socket.on('unpin', (id, ack) => {
+    if (!Number.isInteger(id)) return reply(ack, { error: 'Message not found' });
+    stmts.deletePin.run(id);
+    io.emit('pins', stmts.listPins.all());
+    reply(ack, { ok: true });
   });
 
   socket.on('typing', () => {
