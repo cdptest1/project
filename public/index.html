@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Group Chat</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!-- Auth screen -->
+  <section id="auth-view" class="auth hidden">
+    <div class="auth-card">
+      <h1>💬 Group Chat</h1>
+      <p class="subtitle">One room. Everyone's here.</p>
+      <div class="tabs">
+        <button type="button" class="tab active" data-mode="login">Log in</button>
+        <button type="button" class="tab" data-mode="register">Sign up</button>
+      </div>
+      <form id="auth-form">
+        <label>Username
+          <input name="username" autocomplete="username" required minlength="3" maxlength="20" />
+        </label>
+        <label>Password
+          <input name="password" type="password" autocomplete="current-password" required minlength="6" />
+        </label>
+        <p id="auth-error" class="error" role="alert"></p>
+        <button type="submit" id="auth-submit" class="primary">Log in</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Chat screen -->
+  <section id="chat-view" class="chat hidden">
+    <header class="chat-header">
+      <div class="avatar group">👥</div>
+      <div class="header-info">
+        <div class="title">Group Chat</div>
+        <div id="status-line" class="status">connecting…</div>
+      </div>
+      <span id="me" class="me"></span>
+      <button id="logout" class="ghost" type="button">Log out</button>
+    </header>
+
+    <main id="messages" class="messages">
+      <button id="load-more" class="load-more hidden" type="button">Load earlier messages</button>
+    </main>
+
+    <form id="composer" class="composer">
+      <textarea id="input" rows="1" maxlength="2000" placeholder="Type a message" autocomplete="off"></textarea>
+      <button type="submit" class="send" aria-label="Send">➤</button>
+    </form>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
